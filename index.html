@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multimedia chat!</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"
+        integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+</head>
+<body>
+    <input type='text' placeholder="Message" id='inp' />
+    <button onclick="sendMsg()">Send</button>
+
+    <ul id='messages'></ul>
+
+    <script>
+        // event handlers here
+        function handleChat(data) {
+            $('#messages').append(`
+                <li>
+                    User: ${data.name}
+                    <br />
+                    Message: ${data.text}
+                </li>
+            `);
+        }
+
+        function handleJoinUser(name) {
+            $('#messages').append(`
+                <li>User joined: ${name}</li>
+            `);
+        }
+
+        function handleLeaveUser(name) {
+            $('#messages').append(`
+                <li>User left: ${name}</li>
+            `);
+        }
+
+        function getName() {
+            name = prompt('Please enter your name.');
+        }
+        
+        function emitEvent(type, data) {
+            socket.emit(type, data);
+        }
+
+        function sendMsg() {
+            const text = $('#inp').val();
+            emitEvent('chat', { name, text });
+        }
+    </script>
+    
+    <script>
+        let socket = io();
+        let name = '';
+
+        socket.on('connect', () => {
+            getName();
+            emitEvent('join', name);
+        });
+        
+        socket.on('join', handleJoinUser);
+        socket.on('chat', handleChat);
+        socket.on('leave', handleLeaveUser);
+    </script>
+</body>
+</html>

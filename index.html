@@ -11,10 +11,34 @@
 <body>
     <input type='text' placeholder="Message" id='inp' />
     <button onclick="sendMsg()">Send</button>
-
+    <!-- used for typing indicators -->
+    <p id="indicator"></p>
     <ul id='messages'></ul>
 
     <script>
+        // dom event handlers
+        $('#inp').on('input', emitStartType);
+        $('#inp').on('blur', emitStopType);
+        
+        let typingTimeout = null;
+        let isStartTypeSent = false;
+        let typingUsers = new Set();
+
+        function emitStartType() {
+            clearTimeout(typingTimeout)
+            typingTimeout = setTimeout(emitStopType, 1000)
+            if (isStartTypeSent) return
+            socket.emit('start-type', name, () => {
+                isStartTypeSent = true
+            });
+        }
+
+        function emitStopType() {
+            socket.emit('stop-type', name, () => {
+                isStartTypeSent = false
+            });
+        }
+
         // event handlers here
         function handleChat(data) {
             $('#messages').append(`
@@ -33,6 +57,7 @@
         }
 
         function handleLeaveUser(name) {
+            handleStopType(name);
             $('#messages').append(`
                 <li>User left: ${name}</li>
             `);
@@ -45,6 +70,28 @@
         function sendMsg() {
             const text = $('#inp').val();
             socket.emit('chat', { name, text });
+        }
+
+        function handleStartType(name) {
+            typingUsers.add(name);
+            let displayString = '';
+            for (const user of Array.from(typingUsers)) {
+                displayString += `${user}, `;
+            }
+            displayString = displayString.substr(0, displayString.length - 2)
+            displayString += ' typing...'
+            $('#indicator').text(displayString);
+        }
+
+        function handleStopType(name) {
+            typingUsers.delete(name)
+            let displayString = ''
+            for (const user of Array.from(typingUsers)) {
+                displayString += `${user}, `;
+            }
+            displayString = displayString.substr(0, displayString.length - 2)
+            displayString += displayString.length > 0 ? ' typing...' : ''
+            $('#indicator').text(displayString)
         }
     </script>
 
@@ -61,6 +108,8 @@
             socket.on('join', handleJoinUser);
             socket.on('chat', handleChat);
             socket.on('leave', handleLeaveUser);
+            socket.on('start-type', handleStartType);
+            socket.on('stop-type', handleStopType);
         });
     </script>
 </body>

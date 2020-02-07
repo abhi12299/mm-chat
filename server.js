@@ -24,6 +24,18 @@ io.on('connection', socket => {
         console.log(`chat data: ${JSON.stringify(data, null, 2)}`);
         io.emit('chat', data);
     });
+
+    socket.on('start-type', (name, cb) => {
+        console.log(`${name} started to type`);
+        socket.broadcast.emit('start-type', name);
+        cb();
+    });
+
+    socket.on('stop-type', (name, cb) => {
+        console.log(`${name} stopped typing`);
+        socket.broadcast.emit('stop-type', name);
+        cb();
+    });
 });
 
 http.listen(3000, () => {

@@ -10,6 +10,12 @@
 
 <body>
     <input type='text' placeholder="Message" id='inp' />
+    <form id="form">
+        <input type="file" name="file" />
+        <button type="submit">Upload File and Send</button>
+        <!-- for upload progress -->
+        <div id="upload-progress"></div>
+    </form>
     <button onclick="sendMsg()">Send</button>
     <!-- used for typing indicators -->
     <p id="indicator"></p>
@@ -19,10 +25,58 @@
         // dom event handlers
         $('#inp').on('input', emitStartType);
         $('#inp').on('blur', emitStopType);
+        $('#form').on('submit', handleFormSubmit);
         
         let typingTimeout = null;
         let isStartTypeSent = false;
         let typingUsers = new Set();
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const form = $(this)
+            const formData = new FormData(form[0])
+            for (const p of formData) {
+                if (p[1].size <= 0) {
+                    // no form data available!
+                    return
+                }
+            }
+            $.ajax({
+                method: 'POST',
+                data: formData,
+                cache: false,
+                contentType: false,
+                processData: false,
+                url: '/upload',
+                success: handleUploadSuccess,
+                xhr: handleUploadProgress
+            })
+        }
+
+        function handleUploadSuccess(resp) {
+            socket.emit('file', { name, file: { url: `/${resp.newFilename}`, filename: resp.originalFilename } });
+            $('#form')[0].reset();
+            $('#upload-progress').text('');
+        }
+
+        function handleUploadProgress() {
+            const xhr = new window.XMLHttpRequest();
+            xhr.upload.addEventListener('progress', e => {
+                const percent = (event.loaded / event.total) * 100;
+                const progress = Math.round(percent);
+                $('#upload-progress').text(`${progress}% uploaded`);
+            }, false);
+            xhr.addEventListener('error', e => {
+                $('#upload-progress').text('Upload errored!');
+                console.error(e);
+            }, false);
+            xhr.addEventListener('abort', e => {
+                $('#upload-progress').text('Upload aborted');
+                console.error(e);
+            }, false);
+
+            return xhr;
+        }
 
         function emitStartType() {
             clearTimeout(typingTimeout)
@@ -93,6 +147,16 @@
             displayString += displayString.length > 0 ? ' typing...' : ''
             $('#indicator').text(displayString)
         }
+
+        function handleFile(f) {
+            $('#messages').append(`
+                <li>
+                    User: ${f.name}
+                    <br />
+                    File: <a target='_blank' href='${f.file.url}' download='${f.file.filename}'>${f.file.filename}</a>
+                </li>
+            `);
+        }
     </script>
 
     <script>
@@ -110,6 +174,7 @@
             socket.on('leave', handleLeaveUser);
             socket.on('start-type', handleStartType);
             socket.on('stop-type', handleStopType);
+            socket.on('file', handleFile);
         });
     </script>
 </body>

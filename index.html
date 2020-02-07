@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Multimedia chat!</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://code.jquery.com/jquery-3.4.1.min.js"
         integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
 </head>
+
 <body>
     <input type='text' placeholder="Message" id='inp' />
     <button onclick="sendMsg()">Send</button>
@@ -37,11 +39,7 @@
         }
 
         function getName() {
-            name = prompt('Please enter your name.');
-        }
-        
-        function emitEvent(type, data) {
-            socket.emit(type, data);
+            return prompt('Please enter your name.');
         }
 
         function sendMsg() {
@@ -49,19 +47,22 @@
             emitEvent('chat', { name, text });
         }
     </script>
-    
-    <script>
-        let socket = io();
-        let name = '';
 
-        socket.on('connect', () => {
-            getName();
-            emitEvent('join', name);
+    <script>
+        $(document).ready(() => {
+            let socket = io();
+            let name = '';
+
+            socket.on('connect', () => {
+                name = getName();
+                emitEvent('join', name);
+            });
+
+            socket.on('join', handleJoinUser);
+            socket.on('chat', handleChat);
+            socket.on('leave', handleLeaveUser);
         });
-        
-        socket.on('join', handleJoinUser);
-        socket.on('chat', handleChat);
-        socket.on('leave', handleLeaveUser);
     </script>
 </body>
+
 </html>

@@ -44,18 +44,18 @@
 
         function sendMsg() {
             const text = $('#inp').val();
-            emitEvent('chat', { name, text });
+            socket.emit('chat', { name, text });
         }
     </script>
 
     <script>
+        let socket;
+        let name = '';
         $(document).ready(() => {
-            let socket = io();
-            let name = '';
-
+            socket = io();
             socket.on('connect', () => {
                 name = getName();
-                emitEvent('join', name);
+                socket.emit('join', name)
             });
 
             socket.on('join', handleJoinUser);

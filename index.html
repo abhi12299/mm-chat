@@ -6,17 +6,29 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://code.jquery.com/jquery-3.4.1.min.js"
         integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
 </head>
 
 <body>
     <input type='text' placeholder="Message" id='inp' />
+    <br /><br />
     <form id="form">
         <input type="file" name="file" />
         <button type="submit">Upload File and Send</button>
         <!-- for upload progress -->
         <div id="upload-progress"></div>
     </form>
+    <br /><br />
+    <button id='record-audio'>
+        Record message!
+    </button>
+    <button id='stop-record-audio' style="display: none;">
+        Stop recording message!
+    </button>
+    <br /><br />
     <button onclick="sendMsg()">Send</button>
+    <br />
     <!-- used for typing indicators -->
     <p id="indicator"></p>
     <ul id='messages'></ul>
@@ -26,10 +38,55 @@
         $('#inp').on('input', emitStartType);
         $('#inp').on('blur', emitStopType);
         $('#form').on('submit', handleFormSubmit);
-        
+        $('#record-audio').on('click', handleRecordAudio);
+        $('#stop-record-audio').on('click', handleStopRecordAudio);
+
         let typingTimeout = null;
         let isStartTypeSent = false;
         let typingUsers = new Set();
+        let stopRecordingAudio = false;
+
+        function handleRecordAudio() {
+            $("#record-audio").prop("disabled", true);
+            $('#stop-record-audio').css('display', 'block');
+            if (window.navigator.getUserMedia) {
+                window.navigator.getUserMedia({ audio: true }, streamAudio, console.error);
+            } else if (window.navigator.mediaDevices.getUserMedia) {
+                window.navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(streamAudio)
+                    .catch(console.error);
+            }
+        }
+
+        function streamAudio(stream) {
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            const audioChunks = [];
+
+            mediaRecorder.addEventListener("dataavailable", event => {
+                audioChunks.push(event.data);
+            });
+
+            mediaRecorder.addEventListener("stop", () => {
+                const audioBlob = new Blob(audioChunks);
+                socket.emit('audio', { blob: audioBlob, name });
+                $("#record").prop("disabled", false);
+                stopRecordingAudio = false;
+            });
+
+            let i = setInterval(() => {
+                if (stopRecordingAudio) {
+                    mediaRecorder.stop();
+                    clearInterval(i);
+                }
+            }, 10);
+        }
+
+        function handleStopRecordAudio() {
+            stopRecordingAudio = true;
+            $('#stop-record-audio').css('display', 'none');
+            $("#record-audio").prop("disabled", false);
+        }
 
         function handleFormSubmit(e) {
             e.preventDefault();
@@ -93,15 +150,44 @@
             });
         }
 
+        function handleLikeClick(msg) {
+            socket.emit('like', { ...msg, from: name });
+        }
+
+        function handleDislikeClick(msg) {
+            socket.emit('dislike', { ...msg, from: name });
+        }
+
+        function handleLike(msg) {
+            toastr.options = {
+                positionClass: 'toast-top-center'
+            }
+            toastr.success(`${msg.from} liked your message ${msg.text}`)
+        }
+
+        function handleDislike(msg) {
+            toastr.options = {
+                positionClass: 'toast-top-center'
+            }
+            toastr.error(`${msg.from} disliked your message ${msg.text}`)
+        }
+
         // event handlers here
         function handleChat(data) {
+            const msgId = Date.now() + Math.random()
             $('#messages').append(`
                 <li>
                     User: ${data.name}
                     <br />
                     Message: ${data.text}
+                    <br />
+                    <button id="like-${msgId}">Like</button>
+                    <button id="dislike-${msgId}">Dislike</button>
                 </li>
             `);
+            // register click handler for above 2 btns
+            document.getElementById(`like-${msgId}`).addEventListener('click', () => handleLikeClick(data));
+            document.getElementById(`dislike-${msgId}`).addEventListener('click', () => handleDislikeClick(data));
         }
 
         function handleJoinUser(name) {
@@ -157,6 +243,36 @@
                 </li>
             `);
         }
+
+        function handleAudioMessage(msg) {
+            const blob = new Blob([msg.blob]);
+            const audioUrl = URL.createObjectURL(blob);
+            const audio = new Audio(audioUrl);
+            const id = `audio_${msg.name}${Date.now()}`;
+            const li = document.createElement('li');
+            li.innerHTML = `Audio by:${msg.name}<br />`;
+            li.innerHTML += `
+                <audio id='${id}'>
+                    <source src='${audioUrl}' />
+                </audio>
+            `;
+            li.innerHTML += `
+                <button id='play${id}'>Play</button>
+                <button id='pause${id}'>Pause</button>
+            `;
+            $('#messages').append(li);
+            // event listener for play btn
+            $(`#play${id}`).on('click', () => {
+                // get audio element
+                $(`#${id}`)[0].play();
+            });
+
+            // event listener for pause btn
+            $(`#pause${id}`).on('click', () => {
+                // get audio element
+                $(`#${id}`)[0].pause();
+            });
+        }
     </script>
 
     <script>
@@ -175,6 +291,9 @@
             socket.on('start-type', handleStartType);
             socket.on('stop-type', handleStopType);
             socket.on('file', handleFile);
+            socket.on('like', handleLike);
+            socket.on('dislike', handleDislike);
+            socket.on('audio', handleAudioMessage);
         });
     </script>
 </body>

@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const redisClient = require('./redisDb')
 
 const Busboy = require('busboy');
 const app = express();
@@ -33,15 +34,17 @@ app.post('/upload', function(req, res) {
 });
 
 io.on('connection', socket => {
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         console.log(`${socket.name} disconnected!`);
         io.emit('leave', socket.name);
+        await redisClient.delAsync(`socketIdFor-${socket.name}`)
     });
 
-    socket.on('join', name => {
+    socket.on('join', async name => {
         console.log(`${name} joined!`);
         socket.name = name;
         io.emit('join', name);
+        await redisClient.setAsync(`socketIdFor-${name}`, socket.id)
     });
 
     socket.on('chat', data => {
@@ -64,6 +67,40 @@ io.on('connection', socket => {
     socket.on('file', f => {
         console.log(`File by: ${f.name}`);
         io.emit('file', f);
+    });
+
+    socket.on('like', async (msg) => {
+        try {
+            const socketId = await redisClient.getAsync(`socketIdFor-${msg.name}`)
+            if (socketId) {
+                io.to(socketId).emit('like', msg)
+            } else {
+                // user was probably disconnected or doesnt exist
+                // if disconnected, store this notif in a db
+                // and show it once they log back in
+            }
+        } catch (error) {
+            // handle the error somehow
+        }
+    });
+
+    socket.on('dislike', async (msg) => {
+        try {
+            const socketId = await redisClient.getAsync(`socketIdFor-${msg.name}`)
+            if (socketId) {
+                io.to(socketId).emit('dislike', msg)
+            } else {
+                // user was probably disconnected or doesnt exist
+                // if disconnected, store this notif in a db
+                // and show it once they log back in
+            }
+        } catch (error) {
+            // handle the error somehow
+        }
+    });
+
+    socket.on('audio', msg => {
+        io.emit('audio', msg);
     });
 });
 

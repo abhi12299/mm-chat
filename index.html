@@ -8,9 +8,11 @@
         integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <script src="https://ai.github.io/audio-recorder-polyfill/polyfill.js"></script>
 </head>
 
 <body>
+    <div id="mode"></div>
     <input type='text' placeholder="Message" id='inp' />
     <br /><br />
     <form id="form">
@@ -44,46 +46,34 @@
         let typingTimeout = null;
         let isStartTypeSent = false;
         let typingUsers = new Set();
-        let stopRecordingAudio = false;
+        let mediaRecorder = null;
 
         function handleRecordAudio() {
             $("#record-audio").prop("disabled", true);
             $('#stop-record-audio').css('display', 'block');
-            if (window.navigator.getUserMedia) {
-                window.navigator.getUserMedia({ audio: true }, streamAudio, console.error);
-            } else if (window.navigator.mediaDevices.getUserMedia) {
-                window.navigator.mediaDevices.getUserMedia({ audio: true })
-                    .then(streamAudio)
-                    .catch(console.error);
-            }
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(streamAudio)
+                .catch(console.error)
         }
 
         function streamAudio(stream) {
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.start();
-            const audioChunks = [];
-
+            mediaRecorder = new MediaRecorder(stream);
             mediaRecorder.addEventListener("dataavailable", event => {
-                audioChunks.push(event.data);
-            });
-
-            mediaRecorder.addEventListener("stop", () => {
-                const audioBlob = new Blob(audioChunks);
-                socket.emit('audio', { blob: audioBlob, name });
+                const audioBlob = event.data;
+                console.log(audioBlob)
+                socket.emit('audio', { blob: audioBlob, type: audioBlob.type , name });
                 $("#record").prop("disabled", false);
-                stopRecordingAudio = false;
             });
 
-            let i = setInterval(() => {
-                if (stopRecordingAudio) {
-                    mediaRecorder.stop();
-                    clearInterval(i);
-                }
-            }, 10);
+            mediaRecorder.start();
         }
 
         function handleStopRecordAudio() {
-            stopRecordingAudio = true;
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(i => i.stop());
+                mediaRecorder = null;
+            }
             $('#stop-record-audio').css('display', 'none');
             $("#record-audio").prop("disabled", false);
         }
@@ -245,32 +235,25 @@
         }
 
         function handleAudioMessage(msg) {
-            const blob = new Blob([msg.blob]);
+            const blob = new Blob([msg.blob], { type: msg.type });
             const audioUrl = URL.createObjectURL(blob);
             const audio = new Audio(audioUrl);
             const id = `audio_${msg.name}${Date.now()}`;
-            const li = document.createElement('li');
-            li.innerHTML = `Audio by:${msg.name}<br />`;
-            li.innerHTML += `
-                <audio id='${id}'>
-                    <source src='${audioUrl}' />
-                </audio>
-            `;
-            li.innerHTML += `
-                <button id='play${id}'>Play</button>
-                <button id='pause${id}'>Pause</button>
-            `;
-            $('#messages').append(li);
+            $('#messages').append(`
+                <li>
+                    Audio by:${msg.name}<br />
+                    <button id='play${id}'>Play</button>
+                    <button id='pause${id}'>Pause</button>
+                </li>
+            `);
             // event listener for play btn
             $(`#play${id}`).on('click', () => {
-                // get audio element
-                $(`#${id}`)[0].play();
+                audio.play().catch(console.error)
             });
 
             // event listener for pause btn
             $(`#pause${id}`).on('click', () => {
-                // get audio element
-                $(`#${id}`)[0].pause();
+                audio.pause().catch(console.error)
             });
         }
     </script>
